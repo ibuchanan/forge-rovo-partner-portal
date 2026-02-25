@@ -1,18 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SearchPartnerPortalPayload } from "../src/actionpayload";
-import { err } from "neverthrow";
-
-/**
- * Mock forge-ahead module to avoid runtime dependencies
- */
-vi.mock("forge-ahead", () => ({
-  getAuthForEvent: vi.fn(),
-}));
+import { err, ok } from "neverthrow";
 
 /**
  * Mock forge-ahead/errors module to avoid runtime dependencies
  */
 vi.mock("forge-ahead/errors", () => ({
+  ok: (value: unknown) => ok(value),
   StandardError: {
     add: vi.fn(),
     getOrDefault: vi.fn((status: number) => ({
@@ -28,35 +22,22 @@ vi.mock("forge-ahead/errors", () => ({
   },
 }));
 
+/**
+ * Mock global fetch function to avoid actual HTTP requests
+ */
+global.fetch = vi.fn();
+
 // Import after mocking
 const { confluenceCqlSearch } = await import("../src/index");
-const { getAuthForEvent } = await import("forge-ahead");
 const { StandardError } = await import("forge-ahead/errors");
-
-/**
- * Mock the @forge/api module to avoid runtime dependencies
- */
-vi.mock("@forge/api", () => ({
-  route: (strings: TemplateStringsArray, ...values: unknown[]) => {
-    // Simple template tag implementation for testing
-    let result = strings[0];
-    for (let i = 0; i < values.length; i++) {
-      result += values[i] + strings[i + 1];
-    }
-    return result;
-  },
-}));
-
-/**
- * Type for mock auth object with requestConfluence method
- */
-interface MockAuth {
-  requestConfluence: ReturnType<typeof vi.fn>;
-}
 
 describe("confluenceCqlSearch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Set the required environment variables for URL construction and authentication
+    process.env.CONFLUENCE_BASE_URL = "https://developer.atlassian.com";
+    process.env.CONFLUENCE_SERVICE_ACCOUNT = "test@example.com";
+    process.env.CONFLUENCE_API_TOKEN = "test-token-123";
   });
 
   /**
@@ -133,11 +114,7 @@ describe("confluenceCqlSearch", () => {
     };
 
     const mockResponse = createMockSuccessResponse(searchData);
-
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockResolvedValue(mockResponse),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "test",
@@ -154,7 +131,15 @@ describe("confluenceCqlSearch", () => {
       expect(result.value.results).toHaveLength(1);
       expect(result.value.results[0].title).toBe("Test Page");
     }
-    expect(mockAuth.requestConfluence).toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("https://developer.atlassian.com/wiki/rest/api/search?cql="),
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Accept: "application/json",
+        }),
+      }),
+    );
   });
 
   it("should handle search results with no matches", async () => {
@@ -167,11 +152,7 @@ describe("confluenceCqlSearch", () => {
     };
 
     const mockResponse = createMockSuccessResponse(searchData);
-
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockResolvedValue(mockResponse),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "nonexistent",
@@ -195,11 +176,7 @@ describe("confluenceCqlSearch", () => {
       errorMessage,
       "Bad Request",
     );
-
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockResolvedValue(mockResponse),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "invalid cql syntax",
@@ -217,12 +194,7 @@ describe("confluenceCqlSearch", () => {
   });
 
   it("should handle network errors", async () => {
-    const mockAuth: MockAuth = {
-      requestConfluence: vi
-        .fn()
-        .mockRejectedValue(new Error("Network timeout")),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockRejectedValue(new Error("Network timeout"));
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "test",
@@ -239,10 +211,7 @@ describe("confluenceCqlSearch", () => {
   });
 
   it("should handle non-Error objects thrown as errors", async () => {
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockRejectedValue("Unknown error string"),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockRejectedValue("Unknown error string");
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "test",
@@ -258,7 +227,7 @@ describe("confluenceCqlSearch", () => {
     }
   });
 
-  it("should use getAuthForEvent with the correct payload", async () => {
+  it("should make fetch request with correct URL and headers", async () => {
     const mockResponse = createMockSuccessResponse({
       results: [
         {
@@ -275,10 +244,7 @@ describe("confluenceCqlSearch", () => {
       totalSize: 1,
     });
 
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockResolvedValue(mockResponse),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "auth",
@@ -288,10 +254,18 @@ describe("confluenceCqlSearch", () => {
     await confluenceCqlSearch(payload);
 
     /**
-     * Verify that getAuthForEvent was called with the payload
-     * This ensures authorization is properly handled
+     * Verify that fetch was called with the correct URL and headers
      */
-    expect(getAuthForEvent).toHaveBeenCalledWith(payload);
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("cql=auth"),
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        }),
+      }),
+    );
   });
 
   it("should log CQL search execution and success", async () => {
@@ -312,10 +286,7 @@ describe("confluenceCqlSearch", () => {
       totalSize: 1,
     });
 
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockResolvedValue(mockResponse),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "log",
@@ -338,11 +309,7 @@ describe("confluenceCqlSearch", () => {
     const consoleErrorSpy = vi.spyOn(console, "error");
     const errorMessage = "API connection failed";
     const mockResponse = createMockErrorResponse(500, errorMessage);
-
-    const mockAuth: MockAuth = {
-      requestConfluence: vi.fn().mockResolvedValue(mockResponse),
-    };
-    vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "test",
@@ -356,6 +323,93 @@ describe("confluenceCqlSearch", () => {
     );
     // Verify that the result is an error
     expect(result.isErr()).toBe(true);
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("should return error when CONFLUENCE_BASE_URL is not set", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error");
+    // Remove the environment variable to test the error case
+    delete process.env.CONFLUENCE_BASE_URL;
+
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
+      context: { cloudId: "test-cloud" } as never,
+    };
+
+    const result = await confluenceCqlSearch(payload);
+
+    // Verify that the result is an error
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.status).toBe(500);
+      expect(result.error.detail).toContain(
+        "CONFLUENCE_BASE_URL environment variable is not configured",
+      );
+    }
+
+    // Verify error was logged
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Error building Confluence API URL:"),
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("should return error when CONFLUENCE_SERVICE_ACCOUNT is not set", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error");
+    // Remove the service account environment variable
+    delete process.env.CONFLUENCE_SERVICE_ACCOUNT;
+
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
+      context: { cloudId: "test-cloud" } as never,
+    };
+
+    const result = await confluenceCqlSearch(payload);
+
+    // Verify that the result is an error
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.status).toBe(500);
+      expect(result.error.detail).toContain(
+        "CONFLUENCE_SERVICE_ACCOUNT environment variable is not configured",
+      );
+    }
+
+    // Verify error was logged
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Error building authentication header:"),
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("should return error when CONFLUENCE_API_TOKEN is not set", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error");
+    // Remove the API token environment variable
+    delete process.env.CONFLUENCE_API_TOKEN;
+
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
+      context: { cloudId: "test-cloud" } as never,
+    };
+
+    const result = await confluenceCqlSearch(payload);
+
+    // Verify that the result is an error
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.status).toBe(500);
+      expect(result.error.detail).toContain(
+        "CONFLUENCE_API_TOKEN environment variable is not configured",
+      );
+    }
+
+    // Verify error was logged
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Error building authentication header:"),
+    );
 
     consoleErrorSpy.mockRestore();
   });
