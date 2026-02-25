@@ -3,6 +3,7 @@ app:
     architecture: arm64
     memoryMB: 256
     name: nodejs24.x
+  id: ari:cloud:ecosystem::app/0ee09c06-5b95-4d5b-9438-36bf206284ae
 modules:
   rovo:agent:
     - key: forge-rovo-partner-portal
@@ -27,26 +28,9 @@ modules:
             The text string to search in Partner Portal.
           required: true
           type: string
-  trigger:
-    - key: trigger-lifecycle
-      events:
-        - avi:forge:installed:app
-        - avi:forge:upgraded:app
-      function: lifecycle-handler
-  webtrigger:
-    - key: dev-trigger
-      function: trigger
-      response:
-        type: dynamic
   function:
-    - key: messageLogger
-      handler: index.messageLogger
     - key: searchPartnerPortal
       handler: index.confluenceCqlSearch
-    - key: trigger
-      handler: index.trigger
-    - key: lifecycle-handler
-      handler: index.lifecycle
 permissions:
   scopes:
     - search:confluence
