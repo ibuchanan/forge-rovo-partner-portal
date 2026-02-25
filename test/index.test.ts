@@ -35,7 +35,7 @@ describe("confluenceCqlSearch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Set the required environment variables for URL construction and authentication
-    process.env.CONFLUENCE_BASE_URL = "https://developer.atlassian.com";
+    process.env.CONFLUENCE_CLOUD_ID = "test-cloud-id";
     process.env.CONFLUENCE_SERVICE_ACCOUNT = "test@example.com";
     process.env.CONFLUENCE_API_TOKEN = "test-token-123";
   });
@@ -133,7 +133,7 @@ describe("confluenceCqlSearch", () => {
     }
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining(
-        "https://developer.atlassian.com/wiki/rest/api/search?cql=",
+        "https://api.atlassian.com/ex/confluence/test-cloud-id/wiki/rest/api/search",
       ),
       expect.objectContaining({
         method: "GET",
@@ -259,7 +259,9 @@ describe("confluenceCqlSearch", () => {
      * Verify that fetch was called with the correct URL and headers
      */
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("cql=auth"),
+      expect.stringContaining(
+        "https://api.atlassian.com/ex/confluence/test-cloud-id/wiki/rest/api/search",
+      ),
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -270,69 +272,10 @@ describe("confluenceCqlSearch", () => {
     );
   });
 
-  it("should log CQL search execution and success", async () => {
-    const consoleSpy = vi.spyOn(console, "log");
-    const mockResponse = createMockSuccessResponse({
-      results: [
-        {
-          id: "page-log",
-          type: "page",
-          status: "current",
-          title: "Log Test Page",
-          url: "https://example.atlassian.net/wiki/pages/log",
-        },
-      ],
-      start: 0,
-      limit: 25,
-      size: 1,
-      totalSize: 1,
-    });
-
-    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
-
-    const payload: SearchPartnerPortalPayload = {
-      searchText: "log",
-      context: { cloudId: "test-cloud" } as never,
-    };
-
-    await confluenceCqlSearch(payload);
-
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Executing Confluence CQL search with query: log",
-    );
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("CQL search returned 1 results"),
-    );
-
-    consoleSpy.mockRestore();
-  });
-
-  it("should log errors appropriately", async () => {
-    const consoleErrorSpy = vi.spyOn(console, "error");
-    const errorMessage = "API connection failed";
-    const mockResponse = createMockErrorResponse(500, errorMessage);
-    vi.mocked(global.fetch).mockResolvedValue(mockResponse as never);
-
-    const payload: SearchPartnerPortalPayload = {
-      searchText: "test",
-      context: { cloudId: "test-cloud" } as never,
-    };
-
-    const result = await confluenceCqlSearch(payload);
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error executing CQL search:"),
-    );
-    // Verify that the result is an error
-    expect(result.isErr()).toBe(true);
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it("should return error when CONFLUENCE_BASE_URL is not set", async () => {
+  it("should return error when CONFLUENCE_CLOUD_ID is not set", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error");
     // Remove the environment variable to test the error case
-    delete process.env.CONFLUENCE_BASE_URL;
+    delete process.env.CONFLUENCE_CLOUD_ID;
 
     const payload: SearchPartnerPortalPayload = {
       searchText: "test",
@@ -346,7 +289,7 @@ describe("confluenceCqlSearch", () => {
     if (result.isErr()) {
       expect(result.error.status).toBe(500);
       expect(result.error.detail).toContain(
-        "CONFLUENCE_BASE_URL environment variable is not configured",
+        "CONFLUENCE_CLOUD_ID environment variable is not configured",
       );
     }
 

@@ -9,35 +9,34 @@ import type { SearchPartnerPortalPayload } from "./actionpayload";
 
 /**
  * Constructs the Confluence CQL Search API URL with proper encoding.
- * Requires the CONFLUENCE_BASE_URL environment variable to be set.
+ * Requires the CONFLUENCE_CLOUD_ID environment variable to be set.
  *
  * @param cqlQuery - The CQL query string to search for
- * @returns A Result containing the fully constructed API URL, or an error if the base URL is not configured
+ * @returns A Result containing the fully constructed API URL, or an error if the cloud ID is not configured
  */
 function buildConfluenceCqlSearchUrl(
   cqlQuery: string,
 ): Result<string, ProblemDetails> {
-  // Get the base URL from environment variable
+  // Get the cloud ID from environment variable
   // This must be configured per environment (dev, staging, prod)
-  const baseUrl = process.env.CONFLUENCE_BASE_URL;
+  // via `forge variable set CONFLUENCE_CLOUD_ID <your-cloud-id>`
+  // The cloud ID is used with OAuth2 style URLs on api.atlassian.com
+  const cloudId = process.env.CONFLUENCE_CLOUD_ID;
 
-  // If the base URL is not configured, return an error Result
-  if (!baseUrl) {
+  // If the cloud ID is not configured, return an error Result
+  if (!cloudId) {
     return StandardError.getOrDefault(500).error(
-      "CONFLUENCE_BASE_URL environment variable is not configured",
-      undefined,
-      undefined,
+      "CONFLUENCE_CLOUD_ID environment variable is not configured",
     );
   }
 
   // URL encode the CQL query to ensure special characters are properly handled
   const encodedCql = encodeURIComponent(cqlQuery);
 
-  // Construct the full API endpoint URL
-  // We use expand to get additional details like space, history, and content
-  const apiUrl = `${baseUrl}/wiki/rest/api/search?cql=${encodedCql}&expand=space,history,content`;
-
-  // Return a successful Result with the constructed URL
+  // Construct the full API endpoint URL using OAuth2 style URLs
+  // This uses api.atlassian.com with the cloud ID for Service Account API Tokens
+  const limit = 25; // Default = 25, adjust to fit Rovo context window
+  const apiUrl = `https://api.atlassian.com/ex/confluence/${cloudId}/wiki/rest/api/search?limit=${limit}&cql=${encodedCql}`;
   return ok(apiUrl);
 }
 
@@ -56,8 +55,6 @@ function getBasicAuthHeader(): Result<string, ProblemDetails> {
   if (!serviceAccount) {
     return StandardError.getOrDefault(500).error(
       "CONFLUENCE_SERVICE_ACCOUNT environment variable is not configured",
-      undefined,
-      undefined,
     );
   }
 
@@ -65,8 +62,6 @@ function getBasicAuthHeader(): Result<string, ProblemDetails> {
   if (!apiToken) {
     return StandardError.getOrDefault(500).error(
       "CONFLUENCE_API_TOKEN environment variable is not configured",
-      undefined,
-      undefined,
     );
   }
 
@@ -139,14 +134,9 @@ export async function confluenceCqlSearch(
   payload: SearchPartnerPortalPayload,
 ): ConfluenceCqlSearchResult {
   // Extract the search text from the payload and use it as a CQL query
-  const cqlQuery = payload.searchText;
+  const cqlQuery = `text ~ "${payload.searchText}`;
 
-  // Log the request for debugging purposes
-  console.log(`Executing Confluence CQL search with query: ${cqlQuery}`);
-
-  // Construct the Confluence v1 Search API URL
-  // The buildConfluenceCqlSearchUrl function handles URL encoding and environment-based configuration
-  // It returns a Result that may contain an error if the environment variable is not configured
+  // Construct the search URL
   const urlResult = buildConfluenceCqlSearchUrl(cqlQuery);
 
   // If URL construction failed, bubble up the error
@@ -161,7 +151,7 @@ export async function confluenceCqlSearch(
   // Extract the URL from the successful Result
   const apiUrl = urlResult.value;
 
-  // Get the Basic Auth header - this is required and will error if credentials are not configured
+  // Get the Basic Auth header
   const authResult = getBasicAuthHeader();
 
   // If auth header construction failed, bubble up the error
@@ -181,12 +171,13 @@ export async function confluenceCqlSearch(
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",
-      // Add the Authorization header from the credentials
       Authorization: authHeader,
     };
 
     // Make the API request to Confluence using standard fetch
     // This makes a direct HTTP request to the Confluence REST API with Basic Auth
+    // Note: the URL must be configured in the manifest:
+    // permissions.external.fetch.backend.address
     const response = await fetch(apiUrl, {
       method: "GET",
       headers,
@@ -217,7 +208,6 @@ export async function confluenceCqlSearch(
     );
 
     // Return a successful Result with the search results
-    // This includes matching pages with titles, excerpts, and metadata
     return ok(searchData);
   } catch (error) {
     // Handle unexpected errors (e.g., network failures, parsing errors)
