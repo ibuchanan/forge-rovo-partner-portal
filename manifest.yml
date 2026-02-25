@@ -35,6 +35,10 @@ permissions:
   scopes:
     - search:confluence
     - read:chat:rovo
+  external:
+    fetch:
+      backend:
+        - address: https://*.atlassian.net
 resources:
   - key: agent-prompts
     path: prompts
