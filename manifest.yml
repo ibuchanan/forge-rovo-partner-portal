@@ -38,7 +38,7 @@ permissions:
   external:
     fetch:
       backend:
-        - address: https://*.atlassian.net
+        - address: https://api.atlassian.com
 resources:
   - key: agent-prompts
     path: prompts

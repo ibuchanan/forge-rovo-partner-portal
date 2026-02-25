@@ -134,7 +134,7 @@ export async function confluenceCqlSearch(
   payload: SearchPartnerPortalPayload,
 ): ConfluenceCqlSearchResult {
   // Extract the search text from the payload and use it as a CQL query
-  const cqlQuery = `text ~ "${payload.searchText}`;
+  const cqlQuery = `text ~ "${payload.searchText}"`;
 
   // Construct the search URL
   const urlResult = buildConfluenceCqlSearchUrl(cqlQuery);
@@ -176,7 +176,7 @@ export async function confluenceCqlSearch(
 
     // Make the API request to Confluence using standard fetch
     // This makes a direct HTTP request to the Confluence REST API with Basic Auth
-    // Note: the URL must be configured in the manifest:
+    // Note: the standard api.atlassian.com URL must be configured in the manifest:
     // permissions.external.fetch.backend.address
     const response = await fetch(apiUrl, {
       method: "GET",
@@ -204,7 +204,7 @@ export async function confluenceCqlSearch(
 
     // Log success for debugging
     console.log(
-      `CQL search returned ${searchData.size} results (total: ${searchData.totalSize ?? searchData.size})`,
+      `CQL search ${cqlQuery} returned ${searchData.size} results (total: ${searchData.totalSize ?? searchData.size})`,
     );
 
     // Return a successful Result with the search results
