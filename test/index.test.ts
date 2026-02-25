@@ -132,7 +132,9 @@ describe("confluenceCqlSearch", () => {
       expect(result.value.results[0].title).toBe("Test Page");
     }
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("https://developer.atlassian.com/wiki/rest/api/search?cql="),
+      expect.stringContaining(
+        "https://developer.atlassian.com/wiki/rest/api/search?cql=",
+      ),
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
