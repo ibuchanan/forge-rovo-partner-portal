@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { readConfluencePage } from "../src/index";
-import { getAuthForEvent, StandardError } from "forge-lib-codegen";
-import type { ReadConfluencePagePayload } from "../src/actionpayload";
+import type { SearchPartnerPortalPayload } from "../src/actionpayload";
 import { err } from "neverthrow";
 
 /**
- * Mock the forge-lib-codegen module to avoid runtime dependencies
+ * Mock forge-ahead module to avoid runtime dependencies
  */
-vi.mock("forge-lib-codegen", () => ({
+vi.mock("forge-ahead", () => ({
   getAuthForEvent: vi.fn(),
+}));
+
+/**
+ * Mock forge-ahead/errors module to avoid runtime dependencies
+ */
+vi.mock("forge-ahead/errors", () => ({
   StandardError: {
     add: vi.fn(),
     getOrDefault: vi.fn((status: number) => ({
@@ -23,6 +27,11 @@ vi.mock("forge-lib-codegen", () => ({
     })),
   },
 }));
+
+// Import after mocking
+const { confluenceCqlSearch } = await import("../src/index");
+const { getAuthForEvent } = await import("forge-ahead");
+const { StandardError } = await import("forge-ahead/errors");
 
 /**
  * Mock the @forge/api module to avoid runtime dependencies
@@ -45,27 +54,34 @@ interface MockAuth {
   requestConfluence: ReturnType<typeof vi.fn>;
 }
 
-describe("readConfluencePage", () => {
+describe("confluenceCqlSearch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   /**
-   * Mock successful Confluence API response
+   * Mock successful Confluence CQL Search API response
    */
-  const createMockSuccessResponse = (pageData: {
-    id: string;
-    title: string;
-    body?: { storage?: { value: string } };
-    version?: { number: number; createdAt: string };
-    createdAt?: string;
-    _links?: { webui?: string };
-    spaceId?: string;
-    status?: string;
+  const createMockSuccessResponse = (searchData: {
+    results: Array<{
+      id: string;
+      type: string;
+      status: string;
+      title: string;
+      space?: { key: string; name: string };
+      history?: { createdDate: string; lastUpdated?: { when: string } };
+      url: string;
+      content?: string;
+      excerpt?: string;
+    }>;
+    start: number;
+    limit: number;
+    size: number;
+    totalSize?: number;
   }) => {
     return {
       ok: true,
-      json: vi.fn().mockResolvedValue(pageData),
+      json: vi.fn().mockResolvedValue(searchData),
       text: vi.fn(),
       status: 200,
     };
@@ -88,108 +104,116 @@ describe("readConfluencePage", () => {
     };
   };
 
-  it("should successfully read a Confluence page with all fields populated", async () => {
-    const pageData = {
-      id: "page-123",
-      title: "Test Page",
-      body: {
-        storage: {
-          value: "<p>This is test content</p>",
+  it("should successfully search Confluence with CQL query and return results", async () => {
+    const searchData = {
+      results: [
+        {
+          id: "page-123",
+          type: "page",
+          status: "current",
+          title: "Test Page",
+          space: {
+            key: "TEST",
+            name: "Test Space",
+          },
+          history: {
+            createdDate: "2024-01-10T08:30:00Z",
+            lastUpdated: {
+              when: "2024-01-15T10:00:00Z",
+            },
+          },
+          url: "https://example.atlassian.net/wiki/spaces/TEST/pages/123",
+          excerpt: "This is test content",
         },
-      },
-      version: {
-        number: 5,
-        createdAt: "2024-01-15T10:00:00Z",
-      },
-      createdAt: "2024-01-10T08:30:00Z",
-      _links: {
-        webui: "https://example.atlassian.net/wiki/spaces/TEST/pages/123",
-      },
-      spaceId: "space-456",
-      status: "current",
+      ],
+      start: 0,
+      limit: 25,
+      size: 1,
+      totalSize: 1,
     };
 
-    const mockResponse = createMockSuccessResponse(pageData);
+    const mockResponse = createMockSuccessResponse(searchData);
 
     const mockAuth: MockAuth = {
       requestConfluence: vi.fn().mockResolvedValue(mockResponse),
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-123",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    const result = await readConfluencePage(payload);
+    const result = await confluenceCqlSearch(payload);
 
     // Result should be successful
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toEqual(pageData);
+      expect(result.value).toEqual(searchData);
+      expect(result.value.size).toBe(1);
+      expect(result.value.results).toHaveLength(1);
+      expect(result.value.results[0].title).toBe("Test Page");
     }
     expect(mockAuth.requestConfluence).toHaveBeenCalled();
   });
 
-  it("should handle pages with missing optional fields", async () => {
-    const pageData = {
-      id: "page-789",
-      title: "Minimal Page",
+  it("should handle search results with no matches", async () => {
+    const searchData = {
+      results: [],
+      start: 0,
+      limit: 25,
+      size: 0,
+      totalSize: 0,
     };
 
-    const mockResponse = createMockSuccessResponse(pageData);
+    const mockResponse = createMockSuccessResponse(searchData);
 
     const mockAuth: MockAuth = {
       requestConfluence: vi.fn().mockResolvedValue(mockResponse),
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-789",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "nonexistent",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    const result = await readConfluencePage(payload);
+    const result = await confluenceCqlSearch(payload);
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toEqual(pageData);
-      expect(result.value.body).toBeUndefined();
-      expect(result.value.version).toBeUndefined();
-      expect(result.value.createdAt).toBeUndefined();
-      expect(result.value._links).toBeUndefined();
-      expect(result.value.spaceId).toBeUndefined();
-      expect(result.value.status).toBeUndefined();
+      expect(result.value).toEqual(searchData);
+      expect(result.value.results).toHaveLength(0);
+      expect(result.value.size).toBe(0);
     }
   });
 
   it("should handle API error responses gracefully", async () => {
-    const errorMessage = "Unauthorized access to page";
+    const errorMessage = "Invalid CQL query";
     const mockResponse = createMockErrorResponse(
-      401,
+      400,
       errorMessage,
-      "Unauthorized",
+      "Bad Request",
     );
-    mockResponse.json = vi.fn().mockResolvedValue({ message: errorMessage });
 
     const mockAuth: MockAuth = {
       requestConfluence: vi.fn().mockResolvedValue(mockResponse),
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-999",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "invalid cql syntax",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    const result = await readConfluencePage(payload);
+    const result = await confluenceCqlSearch(payload);
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.status).toBe(401);
+      expect(result.error.status).toBe(400);
       expect(result.error.detail).toBeDefined();
     }
-    expect(StandardError.add).toHaveBeenCalledWith(401, "Unauthorized");
+    expect(StandardError.add).toHaveBeenCalledWith(400, "Bad Request");
   });
 
   it("should handle network errors", async () => {
@@ -200,12 +224,12 @@ describe("readConfluencePage", () => {
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-network-error",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    const result = await readConfluencePage(payload);
+    const result = await confluenceCqlSearch(payload);
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
@@ -220,12 +244,12 @@ describe("readConfluencePage", () => {
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-unknown-error",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    const result = await readConfluencePage(payload);
+    const result = await confluenceCqlSearch(payload);
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
@@ -236,8 +260,19 @@ describe("readConfluencePage", () => {
 
   it("should use getAuthForEvent with the correct payload", async () => {
     const mockResponse = createMockSuccessResponse({
-      id: "page-auth",
-      title: "Auth Test",
+      results: [
+        {
+          id: "page-auth",
+          type: "page",
+          status: "current",
+          title: "Auth Test",
+          url: "https://example.atlassian.net/wiki/pages/auth",
+        },
+      ],
+      start: 0,
+      limit: 25,
+      size: 1,
+      totalSize: 1,
     });
 
     const mockAuth: MockAuth = {
@@ -245,12 +280,12 @@ describe("readConfluencePage", () => {
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-auth",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "auth",
       context: { cloudId: "test-cloud", customField: "customValue" } as never,
     };
 
-    await readConfluencePage(payload);
+    await confluenceCqlSearch(payload);
 
     /**
      * Verify that getAuthForEvent was called with the payload
@@ -259,11 +294,22 @@ describe("readConfluencePage", () => {
     expect(getAuthForEvent).toHaveBeenCalledWith(payload);
   });
 
-  it("should log page retrieval success", async () => {
+  it("should log CQL search execution and success", async () => {
     const consoleSpy = vi.spyOn(console, "log");
     const mockResponse = createMockSuccessResponse({
-      id: "page-log",
-      title: "Log Test Page",
+      results: [
+        {
+          id: "page-log",
+          type: "page",
+          status: "current",
+          title: "Log Test Page",
+          url: "https://example.atlassian.net/wiki/pages/log",
+        },
+      ],
+      start: 0,
+      limit: 25,
+      size: 1,
+      totalSize: 1,
     });
 
     const mockAuth: MockAuth = {
@@ -271,18 +317,18 @@ describe("readConfluencePage", () => {
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-log",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "log",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    await readConfluencePage(payload);
+    await confluenceCqlSearch(payload);
 
     expect(consoleSpy).toHaveBeenCalledWith(
-      "Reading Confluence page with ID: page-log",
+      "Executing Confluence CQL search with query: log",
     );
     expect(consoleSpy).toHaveBeenCalledWith(
-      "Successfully retrieved page: Log Test Page",
+      expect.stringContaining("CQL search returned 1 results"),
     );
 
     consoleSpy.mockRestore();
@@ -292,22 +338,21 @@ describe("readConfluencePage", () => {
     const consoleErrorSpy = vi.spyOn(console, "error");
     const errorMessage = "API connection failed";
     const mockResponse = createMockErrorResponse(500, errorMessage);
-    mockResponse.json = vi.fn().mockResolvedValue({ message: errorMessage });
 
     const mockAuth: MockAuth = {
       requestConfluence: vi.fn().mockResolvedValue(mockResponse),
     };
     vi.mocked(getAuthForEvent).mockReturnValue(mockAuth as never);
 
-    const payload: ReadConfluencePagePayload = {
-      pageId: "page-error-log",
+    const payload: SearchPartnerPortalPayload = {
+      searchText: "test",
       context: { cloudId: "test-cloud" } as never,
     };
 
-    const result = await readConfluencePage(payload);
+    const result = await confluenceCqlSearch(payload);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error reading Confluence page:"),
+      expect.stringContaining("Error executing CQL search:"),
     );
     // Verify that the result is an error
     expect(result.isErr()).toBe(true);

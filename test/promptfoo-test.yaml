@@ -1,18 +1,18 @@
 - vars:
     # agent-instructions.md is the Atlassian convention for Forge Rovo Agents
     agent_instructions: file://prompts/agent-instructions.md
-    # data/*.md is the Atlassian convention for synthentic data
+    # data/*.md is the Atlassian convention for synthetic data
     agent_context: file://test/data/page-1.md
     # ideally, tests should cover the conversation starters
-    user_prompt: Convert the English from the context to French
+    user_prompt: Search the Partner Portal for pages about Rovo
   assert:
     - type: contains
       # See types of assertions: https://www.promptfoo.dev/docs/configuration/expected-outputs/
-      value: 'Bonjour le monde'
+      value: 'Rovo'
 - vars:
     agent_instructions: file://prompts/agent-instructions.md
     agent_context: file://test/data/page-2.md
-    user_prompt: Translate this context to Spanish
+    user_prompt: Find documentation about libraries
   assert:
     - type: icontains
-      value: 'Dónde está la biblioteca'
+      value: 'library'

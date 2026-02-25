@@ -41,8 +41,8 @@ modules:
   function:
     - key: messageLogger
       handler: index.messageLogger
-    - key: readConfluencePage
-      handler: index.readConfluencePage
+    - key: searchPartnerPortal
+      handler: index.confluenceCqlSearch
     - key: trigger
       handler: index.trigger
     - key: lifecycle-handler
