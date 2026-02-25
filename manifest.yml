@@ -1,0 +1,56 @@
+app:
+  runtime:
+    architecture: arm64
+    memoryMB: 256
+    name: nodejs24.x
+modules:
+  rovo:agent:
+    - key: forge-rovo-partner-portal
+      name: Partner Portal Agent
+      description: An agent for working with the Partner Portal from an external site
+      actions:
+        - search-partner-portal
+      conversationStarters:
+        - Search the Partner Portal for pages about Rovo
+      prompt: resource:agent-prompts;agent-instructions.md
+  action:
+    - key: search-partner-portal
+      name: Search Partner Portal content
+      description: |
+        Search the content of Partner Portal using CQL. Returns the page title, content, and metadata.
+      actionVerb: GET
+      function: searchPartnerPortal
+      inputs:
+        searchText:
+          title: Search Text
+          description: |
+            The text string to search in Partner Portal.
+          required: true
+          type: string
+  trigger:
+    - key: trigger-lifecycle
+      events:
+        - avi:forge:installed:app
+        - avi:forge:upgraded:app
+      function: lifecycle-handler
+  webtrigger:
+    - key: dev-trigger
+      function: trigger
+      response:
+        type: dynamic
+  function:
+    - key: messageLogger
+      handler: index.messageLogger
+    - key: readConfluencePage
+      handler: index.readConfluencePage
+    - key: trigger
+      handler: index.trigger
+    - key: lifecycle-handler
+      handler: index.lifecycle
+permissions:
+  scopes:
+    - search:confluence
+    - read:chat:rovo
+resources:
+  - key: agent-prompts
+    path: prompts
