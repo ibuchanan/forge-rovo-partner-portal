@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+  "config": {
+    "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/main/schema/markdownlint-config-schema.json",
+    "default": true,
+    // Prose in this repo isn't hard-wrapped; rely on editor soft-wrap instead.
+    "MD013": false
+  },
+  "ignores": ["node_modules", "dist"]
+}
