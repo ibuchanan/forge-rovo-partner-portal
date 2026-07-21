@@ -29,10 +29,12 @@ A Rovo agent for searching Partner Portal content using Confluence CQL. It is an
 Set the service-account credentials the app needs to call the Confluence Search API, once per environment:
 
 ```sh
-forge variable set CONFLUENCE_CLOUD_ID <your-cloud-id> --environment development
-forge variable set CONFLUENCE_SERVICE_ACCOUNT <service-account-email> --environment development
-forge variable set CONFLUENCE_API_TOKEN <api-token> --environment development
+forge variables set --encrypt --environment development CONFLUENCE_CLOUD_ID <your-cloud-id>
+forge variables set --encrypt --environment development CONFLUENCE_SERVICE_ACCOUNT <service-account-email>
+forge variables set --encrypt --environment development CONFLUENCE_API_TOKEN <api-token>
 ```
+
+Contributors can upload all three at once instead of running these by hand — see [Environment variables](DEVELOPMENT.md#environment-variables) in `DEVELOPMENT.md`.
 
 ## Deploy and install
 

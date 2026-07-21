@@ -1,36 +1,24 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  "include": ["src"],
   "compilerOptions": {
-    /* Base Options */
+    /* Hardcoded Overrides: sourceMap is enforced by the Forge Bundler regardless of your settings */
+    "jsx": "react-jsx",
+    "sourceMap": true,
+
+    /* Runtime Targets: Derived from the Node 18 environment and Webpack config */
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022"],
+
+    /* Standard Defaults: These are typical for Forge apps but not strictly enforced */
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "target": "ES2023",
-    "allowJs": true,
-    "resolveJsonModule": true,
-    "moduleDetection": "force",
-
-    /* Transpiling for Forge bundler (requried) */
-    "noEmit": false,
-    "outDir": "dist",
-    "rootDir": "src",
-    "sourceMap": true,
-    "moduleResolution": "NodeNext",
-    "module": "NodeNext",
-
-    /* Strictness */
-    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitReturns": true,
-    "noImplicitThis": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
 
-    /* Types */
-    "types": ["node"],
-
-    /* Forge Runtime & UI */
-    "lib": ["ES2023"]
-  }
+    /* Output: The bundler handles this via a temporary directory, but 'dist' is the standard placeholder */
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
 }

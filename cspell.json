@@ -3,5 +3,14 @@
   "version": "0.2",
   "language": "en",
   "ignorePaths": ["node_modules", "dist", "package-lock.json"],
-  "words": ["actionpayload", "evals", "ibuchanan", "promptfoo", "promptfooconfig", "Rovo"]
+  "words": [
+    "actionpayload",
+    "evals",
+    "ibuchanan",
+    "prelint",
+    "promptfoo",
+    "promptfooconfig",
+    "Rovo",
+    "secretspec"
+  ]
 }

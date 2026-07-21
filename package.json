@@ -4,30 +4,58 @@
   "private": true,
   "description": "A Rovo agent for searching Partner Portal content using Confluence CQL",
   "license": "Apache-2.0",
-  "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "changelog": "git cliff",
-    "check": "biome check --write",
-    "clean": "rm -rf ./dist",
+    "changelog": "touch CHANGELOG.md && git cliff --offline --unreleased --prepend CHANGELOG.md",
+    "check": "lefthook run pre-push --force",
+    "clean": "rm -rf ./node_modules && rm package-lock.json && rm -rf ./dist",
     "eval": "promptfoo eval",
+    "eval:view": "promptfoo view",
+    "forge:deploy": "secretspec run --provider dotenv --reason \"npm run forge:deploy\" -- sh -c 'forge deploy --environment \"$FORGE_ENVIRONMENT\"'",
+    "forge:install": "secretspec run --provider dotenv --reason \"npm run forge:install\" -- sh -c 'forge install --site \"$FORGE_SITE\" --product \"$FORGE_PRODUCT\" --environment \"$FORGE_ENVIRONMENT\" --non-interactive'",
+    "forge:register": "forge register",
+    "forge:uninstall": "secretspec run --provider dotenv --reason \"npm run forge:uninstall\" -- sh -c 'forge uninstall --site \"$FORGE_SITE\" --product \"$FORGE_PRODUCT\"'",
+    "forge:upgrade": "secretspec run --provider dotenv --reason \"npm run forge:upgrade\" -- sh -c 'forge install --upgrade --site \"$FORGE_SITE\" --product \"$FORGE_PRODUCT\" --environment \"$FORGE_ENVIRONMENT\" --non-interactive'",
+    "forge:variables:set": "node scripts/forge-vars-from-secretspec.js",
     "format": "biome format --write",
-    "lint": "biome lint",
+    "format:check": "biome format",
+    "lint": "lefthook run lint",
+    "lint:check": "biome lint",
+    "lint:fix": "biome lint --write",
+    "lint:forge": "forge lint",
+    "lint:prelint": "ast-grep scan --globs '!node_modules/**' --globs '!scripts/package.json' --config ./node_modules/@forge-ahead/prelint/sgconfig.ecosol.yml",
+    "size": "npm run build && size-limit",
     "test": "vitest",
-    "types": "actiontypes && biome format --write && tsc",
-    "view": "promptfoo view"
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest watch",
+    "todo": "grep -rn 'TODO' --exclude='package.json' . --color=auto || echo 'No TODOs found!'",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@forge/api": "^7.0",
-    "neverthrow": "^8.2"
+    "@forge-ahead/errors": "github:ibuchanan/forge-ahead-errors",
+    "@forge-ahead/logging": "github:ibuchanan/forge-ahead-logging",
+    "@forge/api": "^8.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4",
-    "@types/node": "^25.3",
+    "@biomejs/biome": "2.5.4",
+    "@forge-ahead/prelint": "github:ibuchanan/tool-forge-prelint-ast-grep",
+    "@size-limit/file": "^12.1",
+    "@types/node": "24",
     "promptfoo": "^0.120",
-    "tsx": "^4.21",
+    "secretspec": "^0.16",
+    "size-limit": "^12.1",
     "typescript": "^5.9",
-    "vitest": "^4.0",
-    "yaml": "^2.8"
-  }
+    "vitest": "^4.1",
+    "yaml": "^2.9"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "15 KB",
+      "brotli": false
+    }
+  ]
 }

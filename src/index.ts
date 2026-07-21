@@ -1,11 +1,17 @@
 import {
+  err,
   ok,
   type ProblemDetails,
   type Result,
   StandardError,
-} from "forge-ahead/errors";
-import { err } from "neverthrow";
+} from "@forge-ahead/errors";
+import { createForgeLogger } from "@forge-ahead/logging";
+// Demo Narrative Logging is example-only storytelling for this sample app,
+// kept behind its own subpath so it's never mistaken for production logging.
+import { createDemoNarrative } from "@forge-ahead/logging/demo";
 import type { SearchPartnerPortalPayload } from "./actionpayload";
+
+const logger = createForgeLogger({ name: "forge-rovo-partner-portal" });
 
 /**
  * Constructs the Confluence CQL Search API URL with proper encoding.
@@ -19,7 +25,7 @@ function buildConfluenceCqlSearchUrl(
 ): Result<string, ProblemDetails> {
   // Get the cloud ID from environment variable
   // This must be configured per environment (dev, staging, prod)
-  // via `forge variable set CONFLUENCE_CLOUD_ID <your-cloud-id>`
+  // via `forge variables set --encrypt CONFLUENCE_CLOUD_ID <your-cloud-id>`
   // The cloud ID is used with OAuth2 style URLs on api.atlassian.com
   const cloudId = process.env.CONFLUENCE_CLOUD_ID;
 
@@ -112,7 +118,7 @@ interface ConfluenceCqlSearchResponse {
 }
 
 /**
- * Result type for confluenceCqlSearch using neverthrow.
+ * Result type for confluenceCqlSearch using @forge-ahead/errors.
  * Returns a Promise that resolves to a Result containing either:
  * - Ok: ConfluenceCqlSearchResponse on success
  * - Err: ProblemDetails on failure
@@ -125,7 +131,7 @@ type ConfluenceCqlSearchResult = Promise<
  * Searches Confluence content using CQL (Confluence Query Language) via the REST API v1.
  * This function executes a CQL query and returns matching pages with metadata.
  *
- * Uses neverthrow Result type for functional error handling instead of exceptions.
+ * Uses the @forge-ahead/errors Result type for functional error handling instead of exceptions.
  *
  * @param payload - The action payload containing the CQL query string
  * @returns A Result promise that resolves to either a success or error response
@@ -133,6 +139,17 @@ type ConfluenceCqlSearchResult = Promise<
 export async function confluenceCqlSearch(
   payload: SearchPartnerPortalPayload,
 ): ConfluenceCqlSearchResult {
+  // Demo-only: narrate the cross-site call this function makes, since the
+  // site that invokes this Rovo agent is not necessarily the site that
+  // hosts the Partner Portal being searched.
+  const demo = createDemoNarrative(logger, {
+    storyId: "partner-portal-cross-site-search",
+  });
+
+  demo.step("Rovo agent invoked from the caller's site", {
+    callerCloudId: payload.context?.cloudId,
+  });
+
   // Extract the search text from the payload and use it as a CQL query
   const cqlQuery = `text ~ "${payload.searchText}"`;
 
@@ -141,8 +158,9 @@ export async function confluenceCqlSearch(
 
   // If URL construction failed, bubble up the error
   if (urlResult.isErr()) {
-    console.error(
-      `Error building Confluence API URL: ${urlResult.error.detail}`,
+    logger.error(
+      { detail: urlResult.error.detail },
+      "Error building Confluence API URL",
     );
     // Return a new error Result with the same error
     return err(urlResult.error);
@@ -151,13 +169,19 @@ export async function confluenceCqlSearch(
   // Extract the URL from the successful Result
   const apiUrl = urlResult.value;
 
+  demo.step(
+    "Resolved the Partner Portal's home site — a different site than the one that invoked this agent — and built its cross-site API URL",
+    { partnerPortalCloudId: process.env.CONFLUENCE_CLOUD_ID },
+  );
+
   // Get the Basic Auth header
   const authResult = getBasicAuthHeader();
 
   // If auth header construction failed, bubble up the error
   if (authResult.isErr()) {
-    console.error(
-      `Error building authentication header: ${authResult.error.detail}`,
+    logger.error(
+      { detail: authResult.error.detail },
+      "Error building authentication header",
     );
     // Return a new error Result with the same error
     return err(authResult.error);
@@ -166,6 +190,10 @@ export async function confluenceCqlSearch(
   // Extract the auth header from the successful Result
   const authHeader = authResult.value;
 
+  demo.step(
+    "Built a service-account Basic Auth header to call the Partner Portal's site as ourselves, not as the invoking user",
+  );
+
   try {
     // Build the request headers
     const headers: Record<string, string> = {
@@ -173,6 +201,11 @@ export async function confluenceCqlSearch(
       "Content-Type": "application/json",
       Authorization: authHeader,
     };
+
+    demo.step(
+      "Calling out from this Forge app to api.atlassian.com — a cross-site call to the Partner Portal's Confluence instance",
+      { targetHost: "api.atlassian.com" },
+    );
 
     // Make the API request to Confluence using standard fetch
     // This makes a direct HTTP request to the Confluence REST API with Basic Auth
@@ -186,9 +219,11 @@ export async function confluenceCqlSearch(
     // Check if the response is successful
     if (!response.ok) {
       const errorText = await response.text();
-      const errorMessage = `Confluence CQL Search API error (${response.status}): ${errorText}`;
 
-      console.error(`Error executing CQL search: ${errorMessage}`);
+      logger.error(
+        { status: response.status, statusText: response.statusText, errorText },
+        "Error executing CQL search",
+      );
       StandardError.add(response.status, response.statusText);
 
       // Return an error Result
@@ -202,9 +237,20 @@ export async function confluenceCqlSearch(
     // Parse the JSON response
     const searchData = (await response.json()) as ConfluenceCqlSearchResponse;
 
+    demo.step(
+      "Received the cross-site response from the Partner Portal's site",
+      {
+        resultCount: searchData.size,
+      },
+    );
+
     // Log success for debugging
-    console.log(
-      `CQL search ${cqlQuery} returned ${searchData.size} results (total: ${searchData.totalSize ?? searchData.size})`,
+    logger.info(
+      {
+        size: searchData.size,
+        totalSize: searchData.totalSize ?? searchData.size,
+      },
+      "CQL search completed",
     );
 
     // Return a successful Result with the search results
@@ -214,7 +260,7 @@ export async function confluenceCqlSearch(
     // Extract error message from Error objects or convert other types to string
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    console.error(`Unexpected error during CQL search: ${errorMessage}`);
+    logger.error({ error: errorMessage }, "Unexpected error during CQL search");
 
     // Return an error Result using StandardError helper
     // This allows the Rovo agent to gracefully handle errors

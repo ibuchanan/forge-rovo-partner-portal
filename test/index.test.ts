@@ -1,25 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SearchPartnerPortalPayload } from "../src/actionpayload";
-import { err, ok } from "neverthrow";
 
 /**
- * Mock forge-ahead/errors module to avoid runtime dependencies
+ * Mock @forge-ahead/errors' StandardError registry so tests can assert on it,
+ * while using the module's real `ok`/`err` (via importOriginal) instead of a
+ * separate neverthrow import.
  */
-vi.mock("forge-ahead/errors", () => ({
-  ok: (value: unknown) => ok(value),
-  StandardError: {
-    add: vi.fn(),
-    getOrDefault: vi.fn((status: number) => ({
-      error: vi.fn((errorData: unknown, _: unknown, _url: unknown) => {
-        return err({
-          type: "about:blank",
-          title: "Internal Server Error",
-          status: status,
-          detail: String(errorData),
-        });
-      }),
-    })),
+vi.mock("@forge-ahead/errors", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@forge-ahead/errors")>();
+  return {
+    ...actual,
+    StandardError: {
+      add: vi.fn(),
+      getOrDefault: vi.fn((status: number) => ({
+        error: vi.fn((errorData: unknown, _: unknown, _url: unknown) => {
+          return actual.err({
+            type: "about:blank",
+            title: "Internal Server Error",
+            status: status,
+            detail: String(errorData),
+          });
+        }),
+      })),
+    },
+  };
+});
+
+/**
+ * Mock @forge-ahead/logging so tests can assert on logger calls instead of
+ * console output. loggerMock is created via vi.hoisted so both the mock
+ * factory (hoisted above imports) and the test assertions below share the
+ * same vi.fn() instances.
+ */
+const { loggerMock } = vi.hoisted(() => ({
+  loggerMock: {
+    fatal: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
   },
+}));
+
+vi.mock("@forge-ahead/logging", () => ({
+  createForgeLogger: () => loggerMock,
 }));
 
 /**
@@ -29,7 +54,7 @@ global.fetch = vi.fn();
 
 // Import after mocking
 const { confluenceCqlSearch } = await import("../src/index");
-const { StandardError } = await import("forge-ahead/errors");
+const { StandardError } = await import("@forge-ahead/errors");
 
 describe("confluenceCqlSearch", () => {
   beforeEach(() => {
@@ -273,7 +298,6 @@ describe("confluenceCqlSearch", () => {
   });
 
   it("should return error when CONFLUENCE_CLOUD_ID is not set", async () => {
-    const consoleErrorSpy = vi.spyOn(console, "error");
     // Remove the environment variable to test the error case
     delete process.env.CONFLUENCE_CLOUD_ID;
 
@@ -294,15 +318,15 @@ describe("confluenceCqlSearch", () => {
     }
 
     // Verify error was logged
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error building Confluence API URL:"),
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      {
+        detail: "CONFLUENCE_CLOUD_ID environment variable is not configured",
+      },
+      "Error building Confluence API URL",
     );
-
-    consoleErrorSpy.mockRestore();
   });
 
   it("should return error when CONFLUENCE_SERVICE_ACCOUNT is not set", async () => {
-    const consoleErrorSpy = vi.spyOn(console, "error");
     // Remove the service account environment variable
     delete process.env.CONFLUENCE_SERVICE_ACCOUNT;
 
@@ -323,15 +347,16 @@ describe("confluenceCqlSearch", () => {
     }
 
     // Verify error was logged
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error building authentication header:"),
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      {
+        detail:
+          "CONFLUENCE_SERVICE_ACCOUNT environment variable is not configured",
+      },
+      "Error building authentication header",
     );
-
-    consoleErrorSpy.mockRestore();
   });
 
   it("should return error when CONFLUENCE_API_TOKEN is not set", async () => {
-    const consoleErrorSpy = vi.spyOn(console, "error");
     // Remove the API token environment variable
     delete process.env.CONFLUENCE_API_TOKEN;
 
@@ -352,10 +377,11 @@ describe("confluenceCqlSearch", () => {
     }
 
     // Verify error was logged
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error building authentication header:"),
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      {
+        detail: "CONFLUENCE_API_TOKEN environment variable is not configured",
+      },
+      "Error building authentication header",
     );
-
-    consoleErrorSpy.mockRestore();
   });
 });
