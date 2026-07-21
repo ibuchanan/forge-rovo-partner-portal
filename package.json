@@ -25,7 +25,7 @@
     "lint:forge": "forge lint",
     "lint:prelint": "ast-grep scan --globs '!node_modules/**' --globs '!scripts/package.json' --config ./node_modules/@forge-ahead/prelint/sgconfig.ecosol.yml",
     "size": "npm run build && size-limit",
-    "test": "vitest",
+    "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "todo": "grep -rn 'TODO' --exclude='package.json' . --color=auto || echo 'No TODOs found!'",

@@ -1,3 +1,9 @@
+colors: false
+output:
+  - meta
+  - summary
+  - failure
+
 lint:
   commands:
     prelint:
