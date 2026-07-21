@@ -27,7 +27,7 @@ function buildConfluenceCqlSearchUrl(
   // This must be configured per environment (dev, staging, prod)
   // via `forge variables set --encrypt CONFLUENCE_CLOUD_ID <your-cloud-id>`
   // The cloud ID is used with OAuth2 style URLs on api.atlassian.com
-  const cloudId = process.env.CONFLUENCE_CLOUD_ID;
+  const cloudId = process.env["CONFLUENCE_CLOUD_ID"];
 
   // If the cloud ID is not configured, return an error Result
   if (!cloudId) {
@@ -54,8 +54,8 @@ function buildConfluenceCqlSearchUrl(
  */
 function getBasicAuthHeader(): Result<string, ProblemDetails> {
   // Read the service account email and API token from environment variables
-  const serviceAccount = process.env.CONFLUENCE_SERVICE_ACCOUNT;
-  const apiToken = process.env.CONFLUENCE_API_TOKEN;
+  const serviceAccount = process.env["CONFLUENCE_SERVICE_ACCOUNT"];
+  const apiToken = process.env["CONFLUENCE_API_TOKEN"];
 
   // If the service account is missing, return an error Result
   if (!serviceAccount) {
@@ -171,7 +171,7 @@ export async function confluenceCqlSearch(
 
   demo.step(
     "Resolved the Partner Portal's home site — a different site than the one that invoked this agent — and built its cross-site API URL",
-    { partnerPortalCloudId: process.env.CONFLUENCE_CLOUD_ID },
+    { partnerPortalCloudId: process.env["CONFLUENCE_CLOUD_ID"] },
   );
 
   // Get the Basic Auth header
